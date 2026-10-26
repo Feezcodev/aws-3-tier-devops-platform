@@ -72,3 +72,25 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           ansible-playbook ansible/playbooks/deploy-k8s.yml
+
+    terraform-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov IaC Scan on Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: true
+
+      - name: Run Trivy IaC Scan on Terraform
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'terraform/'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
