@@ -17,6 +17,15 @@ jobs:
         with:
           python-version: '3.11'
 
+      # 1. Spin up a lightweight local Kubernetes cluster (Kind)
+      - name: Set up Kubernetes Cluster (Kind)
+        uses: engineerd/setup-kind@v0.5.0
+
+      - name: Verify Kubernetes Cluster Connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
@@ -39,7 +48,7 @@ jobs:
         with:
           image-ref: '3-tier-backend:latest'
           format: 'table'
-          exit-code: '0' # Set to '1' to fail the pipeline on vulnerabilities
+          exit-code: '0'
           severity: 'CRITICAL,HIGH'
 
       - name: Build Frontend Docker Image for Scanning
