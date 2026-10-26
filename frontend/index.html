@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS 3-Tier DevOps Platform</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f7f6; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .status-up { color: green; font-weight: bold; }
+        .status-down { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>AWS 3-Tier DevOps Platform</h1>
+        <p>System Status: <span id="health-status" class="status-down">Checking...</span></p>
+    </div>
+
+    <div class="card">
+        <h2>Sample Items from Database</h2>
+        <ul id="items-list">Loading items...</ul>
+    </div>
+
+    <script>
+        // Use a configurable API base URL (defaults to localhost:5000 for local dev)
+        const API_BASE_URL = window.ENV_API_URL || 'http://localhost:5000';
+
+        // Check Backend Health
+        fetch(`${API_BASE_URL}/health`)
+            .then(res => res.json())
+            .then(data => {
+                const badge = document.getElementById('health-status');
+                badge.textContent = data.status;
+                badge.className = 'status-up';
+            })
+            .catch(() => {
+                document.getElementById('health-status').textContent = 'DOWN';
+            });
+
+        // Fetch Items API
+        fetch(`${API_BASE_URL}/api/items`)
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById('items-list');
+                list.innerHTML = '';
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${item.name}</strong>: ${item.description}`;
+                    list.appendChild(li);
+                });
+            })
+            .catch(() => {
+                document.getElementById('items-list').innerHTML = '<li>Failed to load items from API.</li>';
+            });
+    </script>
+</body>
+</html>
