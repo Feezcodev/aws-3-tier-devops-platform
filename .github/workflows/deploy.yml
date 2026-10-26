@@ -17,9 +17,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 1. Spin up a lightweight local Kubernetes cluster (Kind)
       - name: Set up Kubernetes Cluster (Kind)
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1
 
       - name: Verify Kubernetes Cluster Connection
         run: |
