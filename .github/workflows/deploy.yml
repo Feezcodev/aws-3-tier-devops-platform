@@ -1,0 +1,66 @@
+name: Secure CI/CD Pipeline - AWS 3-Tier DevOps
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  security-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kubernetes
+          pip install ansible
+          ansible-galaxy collection install kubernetes.core
+
+      - name: Run Manifest Security Scan (Checkov)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: kubernetes
+          soft_fail: true
+
+      - name: Build Backend Docker Image for Scanning
+        run: |
+          docker build -t 3-tier-backend:latest ./backend
+
+      - name: Run Trivy Vulnerability Scanner on Backend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '3-tier-backend:latest'
+          format: 'table'
+          exit-code: '0' # Set to '1' to fail the pipeline on vulnerabilities
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build Frontend Docker Image for Scanning
+        run: |
+          docker build -t 3-tier-frontend:latest ./frontend
+
+      - name: Run Trivy Vulnerability Scanner on Frontend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '3-tier-frontend:latest'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Ansible Syntax & Lint Check
+        run: |
+          ansible-playbook ansible/playbooks/deploy-k8s.yml --syntax-check
+
+      - name: Run Ansible Deployment Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          ansible-playbook ansible/playbooks/deploy-k8s.yml
