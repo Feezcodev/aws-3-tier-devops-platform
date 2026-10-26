@@ -1,0 +1,8 @@
+---
+- name: Deploy 3-Tier Application Stack to Kubernetes
+  hosts: local
+  connection: local
+  gather_facts: false
+  
+  roles:
+    - role: k8s_deploy
