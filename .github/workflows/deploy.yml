@@ -73,7 +73,7 @@ jobs:
         run: |
           ansible-playbook ansible/playbooks/deploy-k8s.yml
 
-    terraform-scan:
+  terraform-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
