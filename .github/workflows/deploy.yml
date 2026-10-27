@@ -208,3 +208,7 @@ jobs:
         run: |
           kubectl get deployments,pods,services \
             -n "$EKS_NAMESPACE" || true
+
+              deploy:
+    if: ${{ false }}
+    name: Publish Images and Deploy to EKS
