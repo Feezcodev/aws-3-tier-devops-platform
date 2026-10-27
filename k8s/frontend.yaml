@@ -13,9 +13,23 @@ spec:
       labels:
         app: frontend
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
       containers:
         - name: frontend
-          image: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-frontend:latest
+          image:  202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-frontend@sha256:070cb9ea4e66d32f2ceb665c69d1328e5e34f4a5f74af5ee6ad96bf79c81ece7
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -24,6 +38,40 @@ spec:
               value: "8080"
             - name: BACKEND_URL
               value: "http://backend:5000"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
