@@ -1,0 +1,44 @@
+# Environment files and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Git metadata
+.git
+.gitignore
+
+# Logs and test output
+*.log
+coverage
+.nyc_output
+
+# Python and local tooling
+__pycache__
+.venv
+venv
+.terraform
+*.tfstate
+*.tfstate.*
+
+# Local Kubernetes and editor files
+.kube
+.vscode
+.idea
+*.swp
+*.bak
+
+# Private keys and Terraform plans
+*.pem
+*.key
+*.p12
+*.pfx
+*.tfplan
+tfplan
+*.plan
+terraform.tfvars
+terraform.tfvars.json

@@ -1,96 +1,173 @@
+
 name: Secure CI/CD Pipeline - AWS 3-Tier DevOps
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-3-tier-production-deploy
+  cancel-in-progress: false
 
 jobs:
-  security-and-deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Set up Kubernetes Cluster (Kind)
-        uses: helm/kind-action@v1
-
-      - name: Verify Kubernetes Cluster Connection
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install kubernetes
-          pip install ansible
-          ansible-galaxy collection install kubernetes.core
-
-      - name: Run Manifest Security Scan (Checkov)
-        uses: bridgecrewio/checkov-action@master
-        with:
-          framework: kubernetes
-          soft_fail: true
-
-      - name: Build Backend Docker Image for Scanning
-        run: |
-          docker build -t 3-tier-backend:latest ./backend
-
-      - name: Run Trivy Vulnerability Scanner on Backend Image
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '3-tier-backend:latest'
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Build Frontend Docker Image for Scanning
-        run: |
-          docker build -t 3-tier-frontend:latest ./frontend
-
-      - name: Run Trivy Vulnerability Scanner on Frontend Image
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '3-tier-frontend:latest'
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Run Ansible Syntax & Lint Check
-        run: |
-          ansible-playbook ansible/playbooks/deploy-k8s.yml --syntax-check
-
-      - name: Run Ansible Deployment Playbook
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-        run: |
-          ansible-playbook ansible/playbooks/deploy-k8s.yml
-
   terraform-scan:
+    name: Terraform Security Scan
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Run Checkov IaC Scan on Terraform
+      - name: Scan Terraform with Checkov
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform/
           framework: terraform
           soft_fail: true
 
-      - name: Run Trivy IaC Scan on Terraform
+      - name: Scan Terraform with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'config'
-          scan-ref: 'terraform/'
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
+          scan-type: config
+          scan-ref: terraform/
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+
+  security-and-deploy:
+    name: Build, Scan and Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: terraform-scan
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: us-east-1
+      EKS_CLUSTER_NAME: three-tier-cluster
+      EKS_NAMESPACE: three-tier-dev
+      ECR_BACKEND: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-backend
+      ECR_FRONTEND: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-frontend
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Scan Kubernetes Manifests with Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: k8s/
+          framework: kubernetes
+          soft_fail: true
+
+      - name: Configure AWS Credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::202689043428:role/GitHubActions-EKS-3Tier-Deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Backend Image
+        run: |
+          docker build \
+            -t "$ECR_BACKEND:$GITHUB_SHA" \
+            ./backend
+
+      - name: Scan Backend Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-backend:${{ github.sha }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+
+      - name: Build Frontend Image
+        run: |
+          docker build \
+            -t "$ECR_FRONTEND:$GITHUB_SHA" \
+            ./frontend
+
+      - name: Scan Frontend Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-frontend:${{ github.sha }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+
+      - name: Push Images to Amazon ECR
+        run: |
+          docker push "$ECR_BACKEND:$GITHUB_SHA"
+          docker push "$ECR_FRONTEND:$GITHUB_SHA"
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      - name: Verify EKS Access
+        run: |
+          kubectl auth can-i patch deployments \
+            -n "$EKS_NAMESPACE" | grep -qx yes
+          kubectl get namespace "$EKS_NAMESPACE"
+
+      - name: Validate Kubernetes Manifests
+        run: |
+          kubectl apply \
+            --dry-run=client \
+            -f k8s/backend.yaml \
+            -n "$EKS_NAMESPACE"
+
+          kubectl apply \
+            --dry-run=client \
+            -f k8s/frontend.yaml \
+            -n "$EKS_NAMESPACE"
+
+      - name: Deploy Backend and Frontend
+        run: |
+          sed "s|$ECR_BACKEND:latest|$ECR_BACKEND:$GITHUB_SHA|g" \
+            k8s/backend.yaml > /tmp/backend.yaml
+
+          sed "s|$ECR_FRONTEND:latest|$ECR_FRONTEND:$GITHUB_SHA|g" \
+            k8s/frontend.yaml > /tmp/frontend.yaml
+
+          kubectl apply \
+            -f /tmp/backend.yaml \
+            -n "$EKS_NAMESPACE"
+
+          kubectl apply \
+            -f /tmp/frontend.yaml \
+            -n "$EKS_NAMESPACE"
+
+      - name: Verify Backend Rollout
+        run: |
+          kubectl rollout status deployment/backend \
+            -n "$EKS_NAMESPACE" \
+            --timeout=180s
+
+      - name: Verify Frontend Rollout
+        run: |
+          kubectl rollout status deployment/frontend \
+            -n "$EKS_NAMESPACE" \
+            --timeout=180s
+
+      - name: Show Deployment Status
+        if: always()
+        run: |
+          kubectl get deployments,pods,services \
+            -n "$EKS_NAMESPACE" || true

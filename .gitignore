@@ -1,16 +1,55 @@
+# Environment files and secrets
 .env
 .env.*
 !.env.example
 
+# Dependencies and build output
 node_modules/
 dist/
 build/
 coverage/
 
+# Private keys and certificates
 *.pem
 *.key
+*.p12
+*.pfx
 
+# Terraform local files and sensitive artifacts
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+tfplan
+*.plan
 terraform.tfvars
+terraform.tfvars.json
+terraform-state-backup-*.json
+crash.log
+crash.*.log
+
+# Local AWS IAM setup files
+github-oidc-trust-policy.json
+github-ecr-policy.json
+
+# Temporary workflow backups
+.github/workflows/*.backup
+.github/workflows/*.pre-scan-fix
+
+# Local editor and temporary files
+*.swp
+*.bak
+# Local Kubernetes secrets
+k8s/secret.yaml
+
+# Accidental empty temporary files
+/terraform/1.30
+/terraform/true
+
+# Local Kubernetes manifest backups
+k8s/*.backup
+
+# Nested environment files and dependencies
+**/.env
+**/.env.*
+**/node_modules/
