@@ -71,7 +71,7 @@ jobs:
       - name: Scan Backend Image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: aws-3-tier-devops-backend:${{ github.sha }}
+          image-ref: ${{ env.ECR_BACKEND }}:${{ github.sha }}
           scan-type: image
           scanners: vuln
           format: table
@@ -86,7 +86,7 @@ jobs:
       - name: Scan Frontend Image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: aws-3-tier-devops-frontend:${{ github.sha }}
+          image-ref: ${{ env.ECR_FRONTEND }}:${{ github.sha }}
           scan-type: image
           scanners: vuln
           format: table
