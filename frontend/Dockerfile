@@ -1,5 +1,9 @@
 FROM nginxinc/nginx-unprivileged:alpine
 
+# Apply available Alpine security updates before switching to the non-root user.
+USER root
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+
 # Create a dedicated non-root user with a high UID for security compliance.
 USER root
 RUN addgroup -S -g 10001 appgroup \

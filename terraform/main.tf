@@ -16,12 +16,16 @@ provider "aws" {
 
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-id"
+    values = ["use1-az1", "use1-az2"]
+  }
 }
 
 # --- VPC MODULE ---
 module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  source  = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=7c1f791efd61f326ed6102d564d1a65d1eceedf0"
 
   name = "three-tier-vpc"
   cidr = "10.0.0.0/16"
@@ -60,8 +64,7 @@ module "vpc" {
 
 # --- EKS MODULE ---
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  source  = "git::https://github.com/terraform-aws-modules/terraform-aws-eks.git?ref=8a0efdbbc84180a26e0bacfd2b6fcfceac53b3b6"
 
   cluster_name    = "three-tier-cluster"
   cluster_version = "1.31"
