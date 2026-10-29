@@ -58,7 +58,7 @@ jobs:
           soft_fail: false
 
       - name: Trivy Terraform Configuration Scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: terraform/
@@ -95,7 +95,7 @@ jobs:
         run: docker build --pull -t "backend:${GITHUB_SHA}" ./backend
 
       - name: Scan Backend Image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: backend:${{ github.sha }}
           scan-type: image
@@ -109,7 +109,7 @@ jobs:
         run: docker build --pull -t "frontend:${GITHUB_SHA}" ./frontend
 
       - name: Scan Frontend Image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: frontend:${{ github.sha }}
           scan-type: image
@@ -179,7 +179,7 @@ jobs:
           docker tag "$ECR_FRONTEND:$GITHUB_SHA" "frontend:$GITHUB_SHA"
 
       - name: Scan Backend Image Before Publishing
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: backend:${{ github.sha }}
           scan-type: image
@@ -190,7 +190,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan Frontend Image Before Publishing
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: frontend:${{ github.sha }}
           scan-type: image
