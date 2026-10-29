@@ -1,17 +1,28 @@
+
 name: Secure CI/CD Pipeline - AWS 3-Tier DevOps
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "README.md"
+      - "terraform/terraform.tfstate*"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: aws-3-tier-deploy-${{ github.ref }}
+  group: aws-3-tier-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "202689043428"
   ECR_BACKEND: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-backend
   ECR_FRONTEND: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-frontend
   EKS_CLUSTER_NAME: three-tier-cluster
@@ -19,9 +30,9 @@ env:
 
 jobs:
   terraform-security:
-    name: Terraform Security and Validation
+    name: Terraform Validation and Security
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout Repository
@@ -47,31 +58,46 @@ jobs:
           soft_fail: false
 
       - name: Trivy Terraform Configuration Scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
           scan-ref: terraform/
-          skip-dirs: terraform/.terraform
+          trivy-config: trivy.yaml
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
 
-  build-and-scan:
-    name: Build and Scan Application Images
+  test-build-scan:
+    name: Test, Build and Scan Images
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run Backend Tests
+        working-directory: backend
+        run: npm test -- --runInBand
+
       - name: Build Backend Image
-        run: docker build --pull -t "$ECR_BACKEND:$GITHUB_SHA" ./backend
+        run: docker build --pull -t "backend:${GITHUB_SHA}" ./backend
 
       - name: Scan Backend Image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.ECR_BACKEND }}:${{ github.sha }}
+          image-ref: backend:${{ github.sha }}
           scan-type: image
           scanners: vuln
           format: table
@@ -80,12 +106,12 @@ jobs:
           ignore-unfixed: true
 
       - name: Build Frontend Image
-        run: docker build --pull -t "$ECR_FRONTEND:$GITHUB_SHA" ./frontend
+        run: docker build --pull -t "frontend:${GITHUB_SHA}" ./frontend
 
       - name: Scan Frontend Image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.ECR_FRONTEND }}:${{ github.sha }}
+          image-ref: frontend:${{ github.sha }}
           scan-type: image
           scanners: vuln
           format: table
@@ -94,13 +120,18 @@ jobs:
           ignore-unfixed: true
 
   deploy:
-    if: ${{ false }}
     name: Publish Images and Deploy to EKS
     runs-on: ubuntu-latest
     needs:
       - terraform-security
-      - build-and-scan
-    timeout-minutes: 25
+      - test-build-scan
+    timeout-minutes: 30
+
+    # Only deploy from main after a push or a manual run on main.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       github.event_name == 'workflow_dispatch')
 
     permissions:
       contents: read
@@ -120,18 +151,65 @@ jobs:
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
+      - name: Verify ECR Repositories
+        run: |
+          set -euo pipefail
+          aws ecr describe-repositories \
+            --repository-names \
+              aws-3-tier-devops-backend \
+              aws-3-tier-devops-frontend
+
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Images for Publishing
+      - name: Build Backend Image for Deployment
         run: |
-          docker build --pull -t "$ECR_BACKEND:$GITHUB_SHA" ./backend
-          docker build --pull -t "$ECR_FRONTEND:$GITHUB_SHA" ./frontend
+          set -euo pipefail
+          docker build --pull \
+            -t "$ECR_BACKEND:$GITHUB_SHA" \
+            ./backend
+          docker tag "$ECR_BACKEND:$GITHUB_SHA" "backend:$GITHUB_SHA"
 
-      - name: Push Versioned Images
+      - name: Build Frontend Image for Deployment
         run: |
-          docker push "$ECR_BACKEND:$GITHUB_SHA"
-          docker push "$ECR_FRONTEND:$GITHUB_SHA"
+          set -euo pipefail
+          docker build --pull \
+            -t "$ECR_FRONTEND:$GITHUB_SHA" \
+            ./frontend
+          docker tag "$ECR_FRONTEND:$GITHUB_SHA" "frontend:$GITHUB_SHA"
+
+      - name: Scan Backend Image Before Publishing
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: backend:${{ github.sha }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan Frontend Image Before Publishing
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: frontend:${{ github.sha }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Push Backend Image to ECR
+        run: docker push "$ECR_BACKEND:$GITHUB_SHA"
+
+      - name: Push Frontend Image to ECR
+        run: docker push "$ECR_FRONTEND:$GITHUB_SHA"
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
 
       - name: Configure kubectl for EKS
         run: |
@@ -139,16 +217,21 @@ jobs:
             --region "$AWS_REGION" \
             --name "$EKS_CLUSTER_NAME"
 
-      - name: Verify Kubernetes Permissions
+      - name: Verify Cluster Access
         run: |
           set -euo pipefail
+          kubectl get nodes
           kubectl get namespace "$EKS_NAMESPACE"
+
+      - name: Verify Deployment Permissions
+        run: |
+          set -euo pipefail
           kubectl auth can-i get deployments -n "$EKS_NAMESPACE" | grep -qx yes
-          kubectl auth can-i patch deployments -n "$EKS_NAMESPACE" | grep -qx yes
           kubectl auth can-i create deployments -n "$EKS_NAMESPACE" | grep -qx yes
+          kubectl auth can-i patch deployments -n "$EKS_NAMESPACE" | grep -qx yes
           kubectl auth can-i create services -n "$EKS_NAMESPACE" | grep -qx yes
 
-      - name: Render Versioned Manifests
+      - name: Render Versioned Kubernetes Manifests
         shell: bash
         run: |
           set -euo pipefail
@@ -156,13 +239,14 @@ jobs:
           sed "s#${ECR_BACKEND}:latest#${ECR_BACKEND}:${GITHUB_SHA}#g" \
             k8s/backend.yaml > /tmp/backend.yaml
 
-          sed -E "s#${ECR_FRONTEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_FRONTEND}:${GITHUB_SHA}#g" \
+          sed -E \
+            "s#${ECR_FRONTEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_FRONTEND}:${GITHUB_SHA}#g" \
             k8s/frontend.yaml > /tmp/frontend.yaml
 
-          grep -Eq "image:[[:space:]]*${ECR_BACKEND}:${GITHUB_SHA}" /tmp/backend.yaml
-          grep -Eq "image:[[:space:]]*${ECR_FRONTEND}:${GITHUB_SHA}" /tmp/frontend.yaml
+          grep -Fq "image: ${ECR_BACKEND}:${GITHUB_SHA}" /tmp/backend.yaml
+          grep -Fq "image: ${ECR_FRONTEND}:${GITHUB_SHA}" /tmp/frontend.yaml
 
-          echo "Rendered backend and frontend image references:"
+          echo "Rendered image references:"
           grep -n "image:" /tmp/backend.yaml /tmp/frontend.yaml
 
       - name: Scan Rendered Kubernetes Manifests
@@ -172,19 +256,23 @@ jobs:
           framework: kubernetes
           soft_fail: false
 
-      - name: Validate Deployment Manifests
+      - name: Validate Backend Manifest
         run: |
-          set -euo pipefail
           kubectl apply --dry-run=server \
             -f /tmp/backend.yaml \
             -n "$EKS_NAMESPACE"
 
+      - name: Validate Frontend Manifest
+        run: |
           kubectl apply --dry-run=server \
             -f /tmp/frontend.yaml \
             -n "$EKS_NAMESPACE"
 
       - name: Deploy Backend
-        run: kubectl apply -f /tmp/backend.yaml -n "$EKS_NAMESPACE"
+        run: |
+          kubectl apply \
+            -f /tmp/backend.yaml \
+            -n "$EKS_NAMESPACE"
 
       - name: Verify Backend Rollout
         run: |
@@ -193,7 +281,10 @@ jobs:
             --timeout=180s
 
       - name: Deploy Frontend
-        run: kubectl apply -f /tmp/frontend.yaml -n "$EKS_NAMESPACE"
+        run: |
+          kubectl apply \
+            -f /tmp/frontend.yaml \
+            -n "$EKS_NAMESPACE"
 
       - name: Verify Frontend Rollout
         run: |

@@ -1,0 +1,2 @@
+terraform:
+  exclude-downloaded-modules: true
