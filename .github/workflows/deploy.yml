@@ -111,7 +111,7 @@ jobs:
 
   deploy:
     name: Publish Images and Deploy to EKS
-    runs-on: ubuntu-latest
+    runs-on:  [self-hosted, Linux, X64, eks-private]
     needs:
       - terraform-security
       - test-build-scan
