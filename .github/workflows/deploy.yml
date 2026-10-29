@@ -231,8 +231,8 @@ jobs:
             "s#${ECR_FRONTEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_FRONTEND}:${GITHUB_SHA}#g" \
             k8s/frontend.yaml > /tmp/frontend.yaml
 
-          grep -Fq "image: ${ECR_BACKEND}:${GITHUB_SHA}" /tmp/backend.yaml
-          grep -Fq "image: ${ECR_FRONTEND}:${GITHUB_SHA}" /tmp/frontend.yaml
+          grep -Fq "${ECR_BACKEND}:${GITHUB_SHA}" /tmp/backend.yaml
+          grep -Fq "${ECR_FRONTEND}:${GITHUB_SHA}" /tmp/frontend.yaml
 
           echo "Rendered image references:"
           grep -n "image:" /tmp/backend.yaml /tmp/frontend.yaml
