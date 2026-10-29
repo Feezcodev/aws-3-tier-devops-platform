@@ -13,12 +13,57 @@ spec:
       labels:
         app: backend
     spec:
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: backend
-          image: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-backend:latest
+          image: 202689043428.dkr.ecr.us-east-1.amazonaws.com/aws-3-tier-devops-backend@sha256:db6fecbfd85b6e4a4d887d26b5b2c06361b3b5a72752e0de29a6d6c6fbb6df2c
           imagePullPolicy: IfNotPresent
+
           ports:
             - containerPort: 5000
+              protocol: TCP
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+
           env:
             - name: PORT
               value: "5000"
@@ -26,18 +71,28 @@ spec:
               value: "mysql"
             - name: DB_USER
               value: "root"
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: DB_PASSWORD
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: DB_NAME
             - name: DB_PORT
               value: "3306"
+            - name: DB_PASSWORD_FILE
+              value: /var/run/secrets/mysql/DB_PASSWORD
+            - name: DB_NAME_FILE
+              value: /var/run/secrets/mysql/DB_NAME
+
+          volumeMounts:
+            - name: mysql-secret
+              mountPath: /var/run/secrets/mysql
+              readOnly: true
+
+      volumes:
+        - name: mysql-secret
+          secret:
+            secretName: mysql-secret
+            items:
+              - key: DB_PASSWORD
+                path: DB_PASSWORD
+              - key: DB_NAME
+                path: DB_NAME
+
 ---
 apiVersion: v1
 kind: Service

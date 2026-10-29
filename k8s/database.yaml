@@ -1,7 +1,9 @@
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mysql-pvc
+  namespace: three-tier-dev
 spec:
   accessModes:
     - ReadWriteOnce
@@ -13,7 +15,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
+  namespace: three-tier-dev
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: mysql
@@ -22,39 +26,109 @@ spec:
       labels:
         app: mysql
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-      - name: mysql
-        image: mysql:8.0
-        ports:
-        - containerPort: 3306
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mysql-secret
-              key: DB_PASSWORD
-        - name: MYSQL_DATABASE
-          valueFrom:
-            secretKeyRef:
-              name: mysql-secret
-              key: DB_NAME
-        volumeMounts:
-        - name: mysql-storage
-          mountPath: /var/lib/mysql
+        - name: mysql
+          image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          env:
+            - name: MYSQL_ROOT_PASSWORD_FILE
+              value: /run/secrets/mysql/DB_PASSWORD
+            - name: MYSQL_DATABASE
+              value: "threetierdb"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin ping -h 127.0.0.1 --silent
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin ping -h 127.0.0.1 --silent
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin ping -h 127.0.0.1 --silent
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: mysql-storage
+              mountPath: /var/lib/mysql
+            - name: mysql-secret
+              mountPath: /run/secrets/mysql
+              readOnly: true
+            - name: mysql-tmp
+              mountPath: /tmp
+            - name: mysql-run
+              mountPath: /var/run/mysqld
       volumes:
-      - name: mysql-storage
-        persistentVolumeClaim:
-          claimName: mysql-pvc
+        - name: mysql-storage
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+        - name: mysql-secret
+          secret:
+            secretName: mysql-secret
+            items:
+              - key: DB_PASSWORD
+                path: DB_PASSWORD
+        - name: mysql-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+        - name: mysql-run
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mysql
+  namespace: three-tier-dev
 spec:
+  type: ClusterIP
   selector:
     app: mysql
   ports:
-    - protocol: TCP
+    - name: mysql
+      protocol: TCP
       port: 3306
-      targetPort: 3306
-  type: ClusterIP
+      targetPort: mysql

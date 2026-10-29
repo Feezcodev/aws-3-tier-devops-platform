@@ -1,26 +1,50 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: three-tier-network-policy
+  name: frontend-network-policy
   namespace: three-tier-dev
 spec:
   podSelector:
-    matchExpressions:
-      - key: app
-        operator: In
-        values:
-          - frontend
-          - backend
-          - mysql
+    matchLabels:
+      app: frontend
   policyTypes:
     - Ingress
     - Egress
   ingress:
-    # Allow incoming frontend traffic.
+    # Allow incoming traffic to the frontend container.
     - ports:
         - protocol: TCP
           port: 8080
-    # Allow frontend to reach the backend.
+  egress:
+    # Allow frontend pods to call the backend.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow DNS resolution.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: three-tier-dev
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only frontend pods may access the backend API.
     - from:
         - podSelector:
             matchLabels:
@@ -28,7 +52,36 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
-    # Allow backend to reach MySQL.
+  egress:
+    # Allow backend pods to connect to MySQL.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # Allow DNS resolution.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-network-policy
+  namespace: three-tier-dev
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only backend pods may connect to MySQL.
     - from:
         - podSelector:
             matchLabels:
@@ -37,23 +90,7 @@ spec:
         - protocol: TCP
           port: 3306
   egress:
-    # Frontend to backend.
-    - to:
-        - podSelector:
-            matchLabels:
-              app: backend
-      ports:
-        - protocol: TCP
-          port: 5000
-    # Backend to MySQL.
-    - to:
-        - podSelector:
-            matchLabels:
-              app: mysql
-      ports:
-        - protocol: TCP
-          port: 3306
-    # DNS.
+    # Allow DNS resolution.
     - ports:
         - protocol: UDP
           port: 53
