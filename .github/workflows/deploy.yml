@@ -62,6 +62,7 @@ jobs:
         with:
           scan-type: config
           scan-ref: terraform/
+          skip-dirs: .terraform
           trivy-config: trivy.yaml
           format: table
           exit-code: "1"
