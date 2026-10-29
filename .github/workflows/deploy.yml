@@ -223,8 +223,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          sed "s#${ECR_BACKEND}:latest#${ECR_BACKEND}:${GITHUB_SHA}#g" \
-            k8s/backend.yaml > /tmp/backend.yaml
+          sed -E \
+             "s#${ECR_BACKEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_BACKEND}:${GITHUB_SHA}#g" \
+             k8s/backend.yaml > /tmp/backend.yaml
 
           sed -E \
             "s#${ECR_FRONTEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_FRONTEND}:${GITHUB_SHA}#g" \
