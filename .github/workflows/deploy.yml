@@ -207,8 +207,8 @@ jobs:
       - name: Verify Cluster Access
         run: |
           set -euo pipefail
-          kubectl get nodes
           kubectl get namespace "$EKS_NAMESPACE"
+          kubectl get pods -n "$EKS_NAMESPACE"
 
       - name: Verify Deployment Permissions
         run: |
