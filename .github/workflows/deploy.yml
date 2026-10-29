@@ -51,6 +51,7 @@ jobs:
         with:
           scan-type: config
           scan-ref: terraform/
+          skip-dirs: terraform/.terraform
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
@@ -65,8 +66,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Backend Image
-        run: |
-          docker build --pull -t "$ECR_BACKEND:$GITHUB_SHA" ./backend
+        run: docker build --pull -t "$ECR_BACKEND:$GITHUB_SHA" ./backend
 
       - name: Scan Backend Image
         uses: aquasecurity/trivy-action@master
@@ -80,8 +80,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Build Frontend Image
-        run: |
-          docker build --pull -t "$ECR_FRONTEND:$GITHUB_SHA" ./frontend
+        run: docker build --pull -t "$ECR_FRONTEND:$GITHUB_SHA" ./frontend
 
       - name: Scan Frontend Image
         uses: aquasecurity/trivy-action@master
@@ -185,8 +184,7 @@ jobs:
             -n "$EKS_NAMESPACE"
 
       - name: Deploy Backend
-        run: |
-          kubectl apply -f /tmp/backend.yaml -n "$EKS_NAMESPACE"
+        run: kubectl apply -f /tmp/backend.yaml -n "$EKS_NAMESPACE"
 
       - name: Verify Backend Rollout
         run: |
@@ -195,8 +193,7 @@ jobs:
             --timeout=180s
 
       - name: Deploy Frontend
-        run: |
-          kubectl apply -f /tmp/frontend.yaml -n "$EKS_NAMESPACE"
+        run: kubectl apply -f /tmp/frontend.yaml -n "$EKS_NAMESPACE"
 
       - name: Verify Frontend Rollout
         run: |
