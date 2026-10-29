@@ -111,7 +111,7 @@ jobs:
 
   deploy:
     name: Publish Images and Deploy to EKS
-    runs-on:  [self-hosted, Linux, X64, eks-private]
+    runs-on: [self-hosted, Linux, X64, eks-private]
     needs:
       - terraform-security
       - test-build-scan
@@ -224,8 +224,8 @@ jobs:
           set -euo pipefail
 
           sed -E \
-             "s#${ECR_BACKEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_BACKEND}:${GITHUB_SHA}#g" \
-             k8s/backend.yaml > /tmp/backend.yaml
+            "s#${ECR_BACKEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_BACKEND}:${GITHUB_SHA}#g" \
+            k8s/backend.yaml > /tmp/backend.yaml
 
           sed -E \
             "s#${ECR_FRONTEND}(:latest|@sha256:[[:xdigit:]]+)#${ECR_FRONTEND}:${GITHUB_SHA}#g" \
@@ -283,5 +283,33 @@ jobs:
       - name: Show Deployment Status
         if: always()
         run: |
-          kubectl get deployments,pods,services \
-            -n "$EKS_NAMESPACE" || true
+          echo "===== DEPLOYMENTS ====="
+          kubectl get deployments -n "$EKS_NAMESPACE" || true
+
+          echo "===== PODS ====="
+          kubectl get pods -n "$EKS_NAMESPACE" -o wide || true
+
+          echo "===== SERVICES ====="
+          kubectl get services -n "$EKS_NAMESPACE" || true
+
+      - name: Collect Kubernetes Diagnostics on Failure
+        if: failure()
+        run: |
+          echo "===== NODE STATUS ====="
+          kubectl get nodes -o wide || true
+
+          echo "===== POD STATUS ====="
+          kubectl get pods -n "$EKS_NAMESPACE" -o wide || true
+
+          echo "===== DEPLOYMENT DETAILS ====="
+          kubectl describe deployments -n "$EKS_NAMESPACE" || true
+
+          echo "===== RECENT KUBERNETES EVENTS ====="
+          kubectl get events -n "$EKS_NAMESPACE" \
+            --sort-by=.metadata.creationTimestamp || true
+
+          echo "===== POD DETAILS ====="
+          for pod in $(kubectl get pods -n "$EKS_NAMESPACE" \
+            -o name 2>/dev/null); do
+            kubectl describe "$pod" -n "$EKS_NAMESPACE" || true
+          done
