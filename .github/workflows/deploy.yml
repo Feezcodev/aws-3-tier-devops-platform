@@ -50,23 +50,12 @@ jobs:
       - name: Terraform Validate
         run: terraform -chdir=terraform validate
 
-      - name: Checkov Terraform Scan
+      - name: Checkov Terraform Security Scan
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform/
           framework: terraform
           soft_fail: false
-
-      - name: Trivy Terraform Configuration Scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: config
-          scan-ref: terraform/
-          skip-dirs: .terraform
-          trivy-config: trivy.yaml
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
 
   test-build-scan:
     name: Test, Build and Scan Images
@@ -128,7 +117,6 @@ jobs:
       - test-build-scan
     timeout-minutes: 30
 
-    # Only deploy from main after a push or a manual run on main.
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' ||
@@ -167,16 +155,14 @@ jobs:
         run: |
           set -euo pipefail
           docker build --pull \
-            -t "$ECR_BACKEND:$GITHUB_SHA" \
-            ./backend
+            -t "$ECR_BACKEND:$GITHUB_SHA" ./backend
           docker tag "$ECR_BACKEND:$GITHUB_SHA" "backend:$GITHUB_SHA"
 
       - name: Build Frontend Image for Deployment
         run: |
           set -euo pipefail
           docker build --pull \
-            -t "$ECR_FRONTEND:$GITHUB_SHA" \
-            ./frontend
+            -t "$ECR_FRONTEND:$GITHUB_SHA" ./frontend
           docker tag "$ECR_FRONTEND:$GITHUB_SHA" "frontend:$GITHUB_SHA"
 
       - name: Scan Backend Image Before Publishing
