@@ -11,6 +11,25 @@ The objective is to demonstrate practical DevOps engineering skills through buil
 
 ---
 
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+2. [Architecture Overview](#2-architecture-overview)
+3. [Technology Stack](#3-technology-stack)
+4. [Infrastructure Provisioning with Terraform](#4-infrastructure-provisioning-with-terraform)
+5. [CI/CD Pipeline with GitHub Actions](#5-cicd-pipeline-with-github-actions)
+6. [DevSecOps and Security Practices](#6-devsecops-and-security-practices)
+7. [Kubernetes Deployment and Troubleshooting](#7-kubernetes-deployment-and-troubleshooting)
+8. [Monitoring and Observability](#8-monitoring-and-observability)
+9. [Project Outcomes](#9-project-outcomes)
+10. [Future Enhancements](#10-future-enhancements)
+11. [Repository Structure](#11-repository-structure)
+12. [Getting Started](#12-getting-started)
+13. [Key Engineering Lessons](#13-key-engineering-lessons)
+14. [Author](#14-author)
+
+---
+
 ## 1. Project Overview
 
 The platform is designed around three application tiers:
@@ -25,7 +44,7 @@ The application is containerized with Docker and deployed to Amazon EKS.
 
 GitHub Actions automates the CI/CD process, while AWS services provide the underlying infrastructure, container registry, and secure deployment access.
 
-Prometheus and Grafana provide visibility into Kubernetes infrastructure and worker-node resource utilization.
+Prometheus and Grafana provide visibility into Kubernetes infrastructure, application workloads, and worker-node resource utilization.
 
 ### Engineering Objectives
 
@@ -47,65 +66,65 @@ The platform follows a three-tier application architecture deployed on Amazon EK
 ### Application and CI/CD Architecture
 
 ```text
-                     Developer
-                         |
-                         v
-                    GitHub Repo
-                         |
-                         v
-                GitHub Actions CI/CD
-                         |
-             +-----------+-----------+
-             |                       |
-             v                       v
-       Security Scanning        Build & Test
-       Checkov / Trivy           Docker Images
-             |                       |
-             +-----------+-----------+
-                         |
-                         v
-                    Amazon ECR
-                         |
-                         v
-                 AWS IAM via OIDC
-                         |
-                         v
-                   Amazon EKS
-                         |
-                         v
-              Kubernetes Namespace
-                  three-tier-dev
-                         |
-             +-----------+-----------+
-             |           |           |
-             v           v           v
-          Frontend     Backend     MySQL
-           Pods         Pods        Pods
+                       Developer
+                           |
+                           v
+                       GitHub Repo
+                           |
+                           v
+                  GitHub Actions CI/CD
+                           |
+             +-------------+-------------+
+             |                           |
+             v                           v
+       Security Scanning            Build & Test
+       Checkov / Trivy              Docker Images
+             |                           |
+             +-------------+-------------+
+                           |
+                           v
+                       Amazon ECR
+                           |
+                           v
+                   AWS IAM via OIDC
+                           |
+                           v
+                       Amazon EKS
+                           |
+                           v
+                 Kubernetes Namespace
+                     three-tier-dev
+                           |
+             +-------------+-------------+
+             |             |             |
+             v             v             v
+          Frontend       Backend       MySQL
+            Pods           Pods         Pod
 ```
 
 ### Monitoring Architecture
 
 ```text
-                 Amazon EKS Cluster
-                         |
-             +-----------+-----------+
-             |                       |
-             v                       v
-        Node Exporter          kube-state-metrics
-             |                       |
-             +-----------+-----------+
-                         |
-                         v
-                     Prometheus
-                         |
-                         v
-                      Grafana
-                         |
-                         v
-                Monitoring Dashboards
+                  Amazon EKS Cluster
+                          |
+             +------------+------------+
+             |                         |
+             v                         v
+        Node Exporter            kube-state-metrics
+             |                         |
+             +------------+------------+
+                          |
+                          v
+                      Prometheus
+                          |
+                          v
+                       Grafana
+                          |
+                          v
+                 Monitoring Dashboards
 ```
 
-*The diagrams describe the implemented application delivery and monitoring components. Additional production infrastructure will be added as it is configured and verified.*
+The architecture diagrams describe the application delivery and monitoring components implemented in this project. Additional production infrastructure will be introduced as it is configured and verified.
 
 ---
 
@@ -296,7 +315,7 @@ This exercise provided practical experience with Kubernetes scheduling, node cap
 
 ## 8. Monitoring and Observability
 
-Prometheus and Grafana are deployed to the EKS cluster to monitor infrastructure metrics and provide visibility into worker-node resource utilization.
+Prometheus and Grafana are deployed to the EKS cluster to monitor infrastructure metrics, Kubernetes resource states, and worker-node performance.
 
 ### Monitoring Components
 
@@ -318,20 +337,7 @@ kubectl get pods -n monitoring
 
 ### Prometheus Verification
 
-Prometheus is accessed through Kubernetes port forwarding:
-
-```bash
-kubectl port-forward -n monitoring \
-  svc/prometheus-server 9090:80
-```
-
-Access the Prometheus interface:
-
-```text
-http://localhost:9090
-```
-
-The following PromQL query is used to verify whether monitored targets are available:
+Prometheus target availability is verified using:
 
 ```promql
 up
@@ -356,7 +362,39 @@ http://localhost:3000
 
 Prometheus is configured as the Grafana data source.
 
-### CPU Utilization Monitoring
+### Grafana Observability Dashboards
+
+The project includes custom Kubernetes monitoring panels and imported Grafana dashboards for infrastructure and Kubernetes resource visibility.
+
+#### 1. Kubernetes Monitoring Overview
+
+This dashboard provides visibility into:
+
+- EKS node CPU utilization.
+- EKS node memory utilization.
+- Node health.
+- Application pod readiness.
+- Application pod CPU and memory usage.
+- Kubernetes pod status.
+- Pod restarts.
+- Network traffic.
+
+![AWS 3-Tier Kubernetes Monitoring Overview](screenshots/observability/kubernetes-monitoring-overview.png)
+
+#### 2. EKS Infrastructure Monitoring – Node Exporter Full
+
+The Node Exporter Full dashboard provides worker-node infrastructure metrics, including:
+
+- CPU utilization and system load.
+- RAM utilization.
+- Root filesystem usage.
+- Network receive and transmit traffic.
+- Disk and system performance.
+- Worker-node uptime.
+
+![EKS Node Exporter Full Dashboard](screenshots/observability/eks-node-exporter-monitoring.png)
+
+### Worker-Node CPU Utilization
 
 The following PromQL query calculates worker-node CPU utilization as a percentage:
 
@@ -366,7 +404,7 @@ The following PromQL query calculates worker-node CPU utilization as a percentag
 ))
 ```
 
-### Memory Utilization Monitoring
+### Worker-Node Memory Utilization
 
 The following query calculates worker-node memory utilization as a percentage:
 
@@ -380,15 +418,73 @@ The following query calculates worker-node memory utilization as a percentage:
 )
 ```
 
+### Kubernetes Pod Restarts
+
+The following query tracks container restarts within the application namespace over the previous hour:
+
+```promql
+sum by (pod) (
+  increase(
+    kube_pod_container_status_restarts_total{
+      namespace="three-tier-dev"
+    }[1h]
+  )
+)
+```
+
+### Application Pod Readiness
+
+```promql
+sum by (pod) (
+  kube_pod_status_ready{
+    namespace="three-tier-dev",
+    condition="true"
+  }
+)
+```
+
+### EKS Node Health
+
+```promql
+kube_node_status_condition{
+  condition="Ready",
+  status="true"
+}
+```
+
+### Kubernetes Resource Capacity
+
+Total CPU capacity across the EKS worker nodes:
+
+```promql
+sum(
+  kube_node_status_capacity{
+    resource="cpu"
+  }
+)
+```
+
+Total memory capacity across the EKS worker nodes:
+
+```promql
+sum(
+  kube_node_status_capacity{
+    resource="memory"
+  }
+)
+```
+
 ### Monitoring Objectives
 
 - Observe CPU utilization across EKS worker nodes.
 - Monitor available and used worker-node memory.
+- Track Kubernetes workload health and pod readiness.
+- Observe pod restarts and resource utilization.
 - Verify Prometheus target health.
 - Visualize infrastructure metrics in Grafana.
-- Identify potential resource pressure on Kubernetes nodes.
+- Identify potential resource pressure and operational issues.
 
-*Monitoring coverage and dashboard panels should be expanded as additional metrics and alerting capabilities are configured.*
+Monitoring coverage will be expanded with alerting, centralized logging, and persistent metrics storage as additional capabilities are implemented.
 
 ---
 
@@ -428,6 +524,7 @@ The project demonstrates practical implementation and troubleshooting across sev
 - Configured Prometheus as a Grafana data source.
 - Verified metrics collection from monitoring targets.
 - Developed PromQL queries for CPU and memory monitoring.
+- Built dashboards for Kubernetes and infrastructure visibility.
 
 ---
 
@@ -468,26 +565,127 @@ The platform will be extended with additional production-oriented capabilities.
 
 ## 11. Repository Structure
 
+The repository is organized around infrastructure, Kubernetes manifests, application delivery, automation, and documentation.
+
 ```text
-.
+aws-3-tier-devops-platform/
+│
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml
+│
+├── terraform/
+│   └── ...
+│
 ├── k8s/
 │   ├── backend.yaml
 │   ├── frontend.yaml
 │   └── ...
-├── terraform/
-│   └── ...
+│
+├── screenshots/
+│   └── observability/
+│       ├── kubernetes-monitoring-overview.png
+│       └── eks-node-exporter-monitoring.png
+│
 ├── Dockerfile
-└── README.md
+├── README.md
+└── ...
 ```
 
-*The structure above is illustrative; update it to reflect the actual repository contents.*
+*The structure is illustrative. Update it to reflect the actual files and directories in the repository.*
 
 ---
 
-## 12. Key Engineering Lessons
+## 12. Getting Started
+
+### Prerequisites
+
+Before working with the project, ensure the following tools are available:
+
+- AWS CLI
+- Terraform
+- Docker
+- kubectl
+- Git
+- An AWS account with the required permissions
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/Feezcodev/aws-3-tier-devops-platform.git
+
+cd aws-3-tier-devops-platform
+```
+
+### Configure AWS CLI
+
+```bash
+aws configure
+```
+
+Verify your AWS identity:
+
+```bash
+aws sts get-caller-identity
+```
+
+### Initialize Terraform
+
+Navigate to the Terraform directory:
+
+```bash
+cd terraform
+```
+
+Initialize the working directory:
+
+```bash
+terraform init
+```
+
+Review and validate the infrastructure configuration:
+
+```bash
+terraform fmt -recursive
+
+terraform validate
+
+terraform plan
+```
+
+**Important:** Review the Terraform plan before applying any infrastructure changes. Do not run `terraform apply` against an existing environment without understanding the proposed changes and potential resource replacements.
+
+### Configure kubectl
+
+After the EKS cluster is provisioned and your AWS identity has the necessary access:
+
+```bash
+aws eks update-kubeconfig \
+  --region us-east-1 \
+  --name three-tier-cluster
+```
+
+Verify cluster connectivity:
+
+```bash
+kubectl get nodes
+```
+
+Check application workloads:
+
+```bash
+kubectl get pods -n three-tier-dev
+```
+
+Check monitoring workloads:
+
+```bash
+kubectl get pods -n monitoring
+```
+
+---
+
+## 13. Key Engineering Lessons
 
 Through this project, I developed practical experience in:
 
@@ -501,14 +699,17 @@ Through this project, I developed practical experience in:
 - Prometheus metrics collection and Grafana visualization.
 - PromQL for infrastructure resource monitoring.
 - Integrating security and observability into application delivery.
+- Investigating infrastructure and deployment failures.
+
+This project reinforces the importance of understanding the complete application delivery lifecycle, from infrastructure provisioning to deployment, security, monitoring, and troubleshooting.
 
 ---
 
-## 13. Author
+## 14. Author
 
 **Feezco Touch | DevOps Engineer**
 
-- GitHub: https://github.com/Feezcodev
-- Project Repository: https://github.com/Feezcodev/aws-3-tier-devops-platform
+- GitHub: [Feezcodev](https://github.com/Feezcodev)
+- Project Repository: [AWS 3-Tier DevOps Platform](https://github.com/Feezcodev/aws-3-tier-devops-platform)
 
 **Building secure, automated, and observable cloud infrastructure — one project at a time.**
